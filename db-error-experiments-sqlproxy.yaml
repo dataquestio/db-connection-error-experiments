@@ -1,0 +1,144 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: db-error-experiment-sqlproxy
+  namespace: stage
+  labels:
+    subdomain: stage
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      name: db-error-experiment
+  revisionHistoryLimit: 3
+  template:
+    metadata:
+      labels:
+        name: db-error-experiment
+    spec:
+      containers:
+        - name: db-error-experiment-nosqlproxy
+          image: gcr.io/REDACTED_PROJECT_NAME/db-error-experiment
+          imagePullPolicy: Always
+          env:
+            - name: DO_INITIALIZATION
+              value: "false"
+            - name: DB_TABLE_PREFIX
+              value: "nosqlproxy_"
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: "db-error-experiment-secrets"
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: "db-error-experiment-secrets"
+                  key: DB_PORT
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "db-error-experiment-secrets"
+                  key: DB_PASSWORD
+            - name: DB_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: "db-error-experiment-secrets"
+                  key: DB_DATABASE
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: "db-error-experiment-secrets"
+                  key: DB_USER
+          command: ["python"]
+          args: ["/db.py"]
+          resources:
+            requests:
+              cpu: 200m
+              memory: 750Mi
+            limits:
+              cpu: 350m
+              memory: 1500Mi
+        - name: ping
+          image: gcr.io/REDACTED_PROJECT_NAME/db-error-experiment
+          imagePullPolicy: Always
+          command: ["/bin/bash"]
+          args: ["-c", "while :; do  ping -c 1 -q REDACTED_DATABASE_PUBLIC_IP ; sleep 0.2 ; done"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 10Mi
+            limits:
+              cpu: 100m
+              memory: 50Mi
+        - name: db-error-experiment-sqlproxy
+          image: gcr.io/REDACTED_PROJECT_NAME/db-error-experiment
+          imagePullPolicy: Always
+          env:
+            - name: DO_INITIALIZATION
+              value: "false"
+            - name: DB_TABLE_PREFIX
+              value: "sqlproxy_"
+            - name: DB_HOST
+              value: "127.0.0.1"
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "db-error-experiment-secrets"
+                  key: DB_PASSWORD
+            - name: DB_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: "db-error-experiment-secrets"
+                  key: DB_DATABASE
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: "db-error-experiment-secrets"
+                  key: DB_USER
+          command: ["python"]
+          args: ["/db.py"]
+          resources:
+            requests:
+              cpu: 200m
+              memory: 750Mi
+            limits:
+              cpu: 350m
+              memory: 1500Mi
+        - name: cloudsql-proxy
+          image: "gcr.io/cloudsql-docker/gce-proxy:1.14"
+          command:
+            - /cloud_sql_proxy
+            - --dir=/cloudsql
+            - -instances=REDACTED_PROJECT_NAME:us-east1:REDACTED_DB_INSTANCE_NAME=tcp:0.0.0.0:3306
+            - -credential_file=/secrets/cloudsql/credentials.json
+            - -term_timeout=10s
+          ports:
+            - containerPort: 3306
+              name: database-port
+          volumeMounts:
+            - name: sql-client-sa
+              mountPath: /secrets/cloudsql
+              readOnly: true
+            - name: ssl-certs
+              mountPath: /etc/ssl/certs
+            - name: cloudsql
+              mountPath: /cloudsql
+          resources:
+            limits:
+              cpu: 800m
+              memory: 800Mi
+            requests:
+              cpu: 200m
+              memory: 200Mi
+      volumes:
+        - name: sql-client-sa
+          secret:
+            secretName: sql-client-sa
+        - name: cloudsql
+          emptyDir:
+        - name: ssl-certs
+          hostPath:
+            path: /etc/ssl/certs
