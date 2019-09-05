@@ -82,7 +82,7 @@ spec:
             - name: DB_HOST
               value: "127.0.0.1"
             - name: DB_PORT
-              value: "3306"
+              value: "5432"
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -112,11 +112,11 @@ spec:
           command:
             - /cloud_sql_proxy
             - --dir=/cloudsql
-            - -instances=REDACTED_PROJECT_NAME:us-east1:REDACTED_DB_INSTANCE_NAME=tcp:0.0.0.0:3306
+            - -instances=REDACTED_PROJECT_NAME:us-east1:REDACTED_DB_INSTANCE_NAME=tcp:0.0.0.0:5432
             - -credential_file=/secrets/cloudsql/credentials.json
             - -term_timeout=10s
           ports:
-            - containerPort: 3306
+            - containerPort: 5432
               name: database-port
           volumeMounts:
             - name: sql-client-sa
